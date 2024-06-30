@@ -11,10 +11,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const projectRoot = path.resolve(__dirname, '..', '..');
 const packagesDir = path.join(projectRoot, 'packages');
-const packageDirs = fs.readdirSync(packagesDir, { withFileTypes: true });
+
+const packageDirs = fs.readdirSync(packagesDir, { withFileTypes: true }).filter(dirent => {
+  return dirent.isDirectory() && fs.existsSync(path.join(packagesDir, dirent.name, 'package.json'));
+});
 
 const pluginDirs = await Promise.all(packageDirs
-  .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('gasket-plugin-'))
+  .filter(dirent => dirent.name.startsWith('gasket-plugin-'))
   .map(async dirent => {
     const { name } = require(path.join(packagesDir, dirent.name, 'package.json'));
     const mod = await import(name);
@@ -22,7 +25,15 @@ const pluginDirs = await Promise.all(packageDirs
   }));
 
 const presetDirs = await Promise.all(packageDirs
-  .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('gasket-preset-'))
+  .filter(dirent => dirent.name.startsWith('gasket-preset-'))
+  .map(async dirent => {
+    const { name } = require(path.join(packagesDir, dirent.name, 'package.json'));
+    const mod = await import(name);
+    return mod.default || mod;
+  }));
+
+const moduleDirs = await Promise.all(packageDirs
+  .filter(dirent => !dirent.name.startsWith('gasket-plugin-') && !dirent.name.startsWith('gasket-preset-') && dirent.name.startsWith('gasket-'))
   .map(async dirent => {
     const { name } = require(path.join(packagesDir, dirent.name, 'package.json'));
     const mod = await import(name);
@@ -30,6 +41,6 @@ const presetDirs = await Promise.all(packageDirs
   }));
 
 export default makeGasket({
-  plugins: presetDirs.concat([configPlugin, siteDocsPlugin], pluginDirs)
+  plugins: presetDirs.concat([configPlugin, siteDocsPlugin], pluginDirs, moduleDirs)
 });
 
